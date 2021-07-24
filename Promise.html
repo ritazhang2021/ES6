@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://cdn.bootcss.com/jquery/3.4.1/jquery.min.js"></script>
+
+</head>
+
+<body>
+    <script>
+
+        // 在 JavaScript 的世界中，所有代码都是单线程执行的。由于这个“缺陷”，导致 JavaScript 的所
+        // 有网络操作，浏览器事件，都必须是异步执行。异步执行可以用回调函数实现。一旦有一连
+        // 串的 ajax 请求 a,b,c,d... 后面的请求依赖前面的请求结果，就需要层层嵌套。这种缩进和层
+        // 层嵌套的方式，非常容易造成上下文代码混乱，我们不得不非常小心翼翼处理内层函数与外
+        // 层函数的数据，一旦内层函数使用了上层函数的变量，这种混乱程度就会加剧......总之，这
+        // 种`层叠上下文`的层层嵌套方式，着实增加了神经的紧张程度。
+        // 案例：用户登录，并展示该用户的各科成绩。在页面发送两次请求：
+        // 1. 查询用户，查询成功说明可以登录
+        // 2. 查询用户成功，查询科目
+        // 3. 根据科目的查询结果，获取去成绩
+        // 分析：此时后台应该提供三个接口，一个提供用户查询接口，一个提供科目的接口，一个提
+        // 供各科成绩的接口，为了渲染方便，最好响应 json 数据。在这里就不编写后台接口了，而
+        // 是提供三个 json 文件，直接提供 json 数据，模拟后台接口：
+
+        //1. 回调函数嵌套的噩梦：层层嵌套。
+        //格式化代码Shift + Alt + F
+        $.ajax({
+            url: "mock/user.json",
+            success(data) {
+                console.log("查询用户：", data);
+                $.ajax({
+                    url: `mock/user_course_${data.id}.json`,
+                    success(data) {
+                        console.log("查询到课程：", data);
+                        $.ajax({
+                            url: `mock/course_score_${data.id}.json`,
+                            success(data) {
+                                console.log("查询到分数：", data);
+                            },
+                            error(error) {
+                                console.log("出现异常了：" + error);
+                            }
+                        });
+                    },
+                    error(error) {
+                        console.log("出现异常了：" + error);
+                    }
+                });
+            },
+            error(error) {
+                console.log("出现异常了：" + error);
+            }
+        });
+
+        //我们可以通过 Promise 解决以上问题
+        //2）、Promise 语法
+        const promise1 = new Promise(function (resolve, reject) {
+            // 执行异步操作
+            if ('/* 异步操作成功 */') {
+                resolve('data');// 调用 resolve，代表 Promise 将返回成功的结果
+            } else {
+                reject('error');// 调用 reject，代表 Promise 会返回失败结果
+            }
+        });
+
+
+        //使用箭头函数可以简写为：
+        const promise2 = new Promise((resolve, reject) => {
+            // 执行异步操作
+            if ('/* 异步操作成功 */') {
+                resolve('data');// 调用 resolve，代表 Promise 将返回成功的结果
+            } else {
+                reject('error');// 调用 reject，代表 Promise 会返回失败结果
+            }
+        });
+
+        //这样，在 promise 中就封装了一段异步执行的结果
+
+        // 2）、处理异步结果
+        // 如果我们想要等待异步执行完成，做一些事情，我们可以通过 promise 的 then 方法来实现。
+        // 如果想要处理 promise 异步执行失败的事件，还可以跟上 catch：
+        promise2.then(function (value2) {
+            // 异步执行成功后的回调
+        }).catch(function (error2) {
+            // 异步执行失败后的回调
+        })
+
+
+        //3）、Promise 改造以前嵌套方式
+        new Promise((resolve, reject) => {
+            $.ajax({
+                url: "mock/user.json",
+                success(data) {
+                    console.log("查询用户：", data);
+                    resolve(data.id);//返回data.id给promise对象，在then的时候再调用它
+                },
+                error(error) {
+                    console.log("出现异常了：" + error);
+                }
+            });
+        }).then((userId) => {
+            return new Promise((resolve, reject) => {
+                $.ajax({
+                    url: `mock/user_course_${userId}.json`, success(data) {
+                        console.log("查询到课程：", data);
+                        resolve(data.id);
+                    },
+                    error(error) {
+                        console.log("出现异常了：" + error);
+                    }
+                });
+            });
+        }).then((corseId) => {
+            console.log(corseId);
+            $.ajax({
+                url: `mock/course_score_${corseId}.json`,
+                success(data) {
+                    console.log("查询到分数：", data);
+                },
+                error(error) {
+                    console.log("出现异常了：" + error);
+                }
+            });
+        });
+
+        // 4）、优化处理
+        // 优化：通常在企业开发中，会把 promise 封装成通用方法，如下：封装了一个通用的 get 请
+        // 求方法；
+        let get = function (url, data) { // 实际开发中会单独放到 common.js 中
+            return new Promise((resolve, reject) => {
+                $.ajax({
+                    url: url,
+                    type: "GET",
+                    data: data,
+                    success(result) {
+                        resolve(result);
+                    },
+                    error(error) {
+                        reject(error);
+                    }
+                });
+            })
+        }// 使用封装的 get 方法，实现查询分数
+        get("mock/user.json").then((result) => {
+            console.log("查询用户：", result);
+            return get(`mock/user_course_${result.id}.json`);
+        }).then((result) => {
+            console.log("查询到课程：", result);
+            return get(`mock/course_score_${result.id}.json`)
+        }).then((result) => {
+            console.log("查询到分数：", result);
+        }).catch(() => {
+            console.log("出现异常了：" + error);
+        });
+       
+
+
+
+
+
+
+
+    </script>
+</body>
+
+</html>
